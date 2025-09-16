@@ -13,12 +13,15 @@ temp_certs_dir = os.path.join(os.getcwd(), 'temp_certs')
 os.makedirs(temp_certs_dir, exist_ok=True)
 
 
-def get_docker_client():
-    """Create a Docker client based on the current connection config in the session."""
-    if 'docker_config' not in session:
-        raise Exception('Not connected to any Docker host. Please connect first.')
+def get_docker_client(config=None):
+    """
+    Create a Docker client based on a passed-in config or the current session.
+    """
+    if config is None:
+        if 'docker_config' not in session:
+            raise Exception('Not connected to any Docker host. Please connect first.')
+        config = session.get('docker_config', {})
 
-    config = session['docker_config']
     base_url = config.get('base_url')
     if not base_url:
         raise Exception('Connection details are incomplete in session.')
@@ -132,6 +135,55 @@ def get_node_info():
                 client.close()
             except Exception:
                 pass
+
+
+@main.route('/api/logs')
+def api_logs():
+    container_id = request.args.get('container')
+    print(f"=== API LOGS CALLED === container={container_id}")
+
+    if not container_id:
+        print("❌ No container ID provided")
+        return jsonify({"error": "Container ID is required"}), 400
+
+    # Capture docker_config from session while we are in the request context
+    docker_config = session.get('docker_config')
+    if not docker_config:
+        return jsonify({"error": "Not connected to any Docker host. Please connect first."}), 401
+
+    def generate(config):
+        client = None
+        try:
+            # Pass the captured config to get a client without needing the session
+            client = get_docker_client(config=config)
+            container = client.containers.get(container_id)
+
+            # Stream logs
+            for chunk in container.logs(stdout=True, stderr=True, stream=True, tail=250, follow=True):
+                if isinstance(chunk, bytes):
+                    line = chunk.decode('utf-8', errors='replace').strip()
+                else:
+                    line = str(chunk).strip()
+                if line:
+                    yield f"data: {json.dumps({'line': line})}\n\n"
+
+        except docker.errors.NotFound:
+            yield f"data: {json.dumps({'error': 'Container not found'})}\n\n"
+        except Exception as e:
+            print(f"❌ Log stream error: {str(e)}")
+            yield f"data: {json.dumps({'error': f'Log stream error: {str(e)}'})}\n\n"
+        finally:
+            if client:
+                try:
+                    client.close()
+                except Exception:
+                    pass
+
+    return Response(
+        generate(docker_config),
+        mimetype='text/event-stream',
+        headers={'Cache-Control': 'no-cache', 'Connection': 'keep-alive', 'X-Accel-Buffering': 'no'}
+    )
 
 @main.route('/api/connect', methods=['POST'])
 def api_connect():
