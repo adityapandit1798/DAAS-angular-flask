@@ -5,11 +5,30 @@ frontend/daas-frontend/node_modules/
 # Python
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
 venv/
+ENV/
+env.bak/
+venv.bak/
 
 # Angular build
 frontend/daas-frontend/dist/
 
-# Other
+# Temp certs
+backend/temp_certs/
+
+# Logs and env
 *.log
 .env
+
+# macOS
+.DS_Store
+
+# VSCode
+.vscode/
