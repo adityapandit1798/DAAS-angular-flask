@@ -1,0 +1,15 @@
+# Node.js
+node_modules/
+frontend/daas-frontend/node_modules/
+
+# Python
+__pycache__/
+*.pyc
+venv/
+
+# Angular build
+frontend/daas-frontend/dist/
+
+# Other
+*.log
+.env

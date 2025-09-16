@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SSH WebSocket Test (xterm.js)</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+    <style>
+        body { font-family: sans-serif; background-color: #1a1a1a; color: #e0e0e0; margin: 1em; }
+        #terminal-container { border: 1px solid #333; resize: vertical; overflow: hidden; height: 60vh; padding: 5px; }
+    </style>
+</head>
+<body>
+    <h1>SSH WebSocket Test Client (with xterm.js)</h1>
+    <p>This page attempts to connect to a test backend at <strong>ws://localhost:5001/ws</strong>. Click inside the black box to start typing.</p>
+    <div id="terminal-container"></div>
+
+    <script>
+        const terminalContainer = document.getElementById('terminal-container');
+        const wsUrl = 'ws://localhost:5001/ws';
+
+        // Initialize xterm.js
+        const term = new Terminal({
+            cursorBlink: true,
+            convertEol: true,
+            theme: {
+                background: '#000000',
+                foreground: '#ffffff',
+            }
+        });
+        const fitAddon = new FitAddon.FitAddon();
+        term.loadAddon(fitAddon);
+        term.open(terminalContainer);
+        fitAddon.fit();
+
+        window.addEventListener('resize', () => fitAddon.fit());
+
+        let ws;
+
+        function connect() {
+            term.writeln('\x1b[1;33m[SYSTEM] Attempting to connect to ' + wsUrl + '...\x1b[0m');
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                term.writeln('\x1b[1;32m[SYSTEM] WebSocket connection opened.\x1b[0m');
+                // Pass terminal size to backend (optional, but good practice)
+                // The test_backend.py doesn't use this, but a real one would.
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.output) {
+                        term.write(data.output);
+                    } else if (data.error) {
+                        term.writeln(`\r\n\x1b[1;31m[ERROR] ${data.error}\x1b[0m`);
+                    }
+                } catch (e) {
+                    // Fallback for non-JSON messages if any
+                    term.write(event.data);
+                }
+            };
+
+            ws.onclose = (event) => {
+                term.writeln(`\r\n\x1b[1;31m[SYSTEM] WebSocket connection closed. Code: ${event.code}, Reason: ${event.reason || 'N/A'}\x1b[0m`);
+            };
+
+            ws.onerror = (error) => {
+                term.writeln('\r\n\x1b[1;31m[ERROR] WebSocket error occurred. See browser console for details.\x1b[0m');
+                console.error('WebSocket Error:', error);
+            };
+
+            // Forward data from xterm.js to the WebSocket
+            term.onData(data => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(data);
+                }
+            });
+        }
+
+        connect(); // Automatically connect on page load
+    </script>
+</body>
+</html>
