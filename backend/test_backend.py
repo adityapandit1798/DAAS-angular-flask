@@ -21,15 +21,32 @@ SSH_PASS = 'password'
 @sock.route('/ws')
 def ssh_websocket_handler(ws):
     """
-    A simplified WebSocket handler for testing the SSH connection.
-    It does not require an initial auth message from the client.
+    A simplified WebSocket handler for testing the SSH connection to a container.
+    It expects an initial auth message with container details.
     """
     print("[TEST_BACKEND] WebSocket connection received.")
     ssh_client = None
     channel = None
 
     try:
-        # 1. Establish SSH connection with Paramiko
+        # 1. Receive container details from the client
+        init_params_raw = ws.receive(timeout=10)
+        if not init_params_raw:
+            ws.close(reason=1008, message='Initial parameters not received.')
+            return
+
+        params = json.loads(init_params_raw)
+        container_id = params.get('containerId')
+        container_shell = params.get('command', '/bin/sh')
+        term_cols = params.get('cols', 80)
+        term_rows = params.get('rows', 24)
+
+        if not container_id:
+            ws.send(json.dumps({'error': 'Container ID is required.'}))
+            ws.close(reason=1008, message='Container ID not provided.')
+            return
+
+        # 2. Establish SSH connection with Paramiko
         print(f"[TEST_BACKEND] Attempting to connect to {SSH_USER}@{SSH_HOST}...")
         ssh_client = paramiko.SSHClient()
         ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -40,13 +57,24 @@ def ssh_websocket_handler(ws):
             timeout=10
         )
         print("[TEST_BACKEND] SSH connection successful.")
-        ws.send(json.dumps({'output': 'Connection established. Opening shell...\r\n'}))
 
-        # 2. Open an interactive shell
-        channel = ssh_client.invoke_shell(term='xterm-color', width=80, height=24)
-        print("[TEST_BACKEND] Shell opened. Entering proxy loop.")
+        # 3. Execute 'docker exec' directly with a PTY
+        command_to_run = f"docker exec -it {container_id} {container_shell}"
+        print(f"[TEST_BACKEND] Executing command directly: {command_to_run}")
+        ws.send(json.dumps({'output': f'Attempting to connect to container {container_id}...\r\n'}))
 
-        # 3. Proxy data between WebSocket and SSH channel
+        # Using exec_command with get_pty=True is cleaner than invoke_shell.
+        # It avoids an intermediate host shell, so the user doesn't see the
+        # `docker exec` command and isn't dropped into the host shell on exit.
+        stdin, stdout, stderr = ssh_client.exec_command(
+            command_to_run,
+            get_pty=True,
+            environment={'TERM': 'xterm-color'}
+        )
+        channel = stdout.channel
+        channel.resize_pty(width=term_cols, height=term_rows)
+
+        # 4. Proxy data between WebSocket and SSH channel
         while ws.connected and channel.active:
             # Check for readability on both the WebSocket and the SSH channel
             readable, _, _ = select.select([ws.sock, channel], [], [], 0.1)
@@ -54,6 +82,17 @@ def ssh_websocket_handler(ws):
             if ws.sock in readable:
                 data_from_client = ws.receive(timeout=0)
                 if data_from_client:
+                    try:
+                        # Handle resize commands from client
+                        msg = json.loads(data_from_client)
+                        if msg.get('type') == 'resize':
+                            print(f"[TEST_BACKEND] Resizing PTY to {msg['cols']}x{msg['rows']}")
+                            channel.resize_pty(width=msg['cols'], height=msg['rows'])
+                            continue
+                    except (json.JSONDecodeError, TypeError):
+                        # Not a JSON command, treat as terminal input
+                        pass
+
                     print(f"[TEST_BACKEND] >> Received from client: {data_from_client!r}")
                     channel.send(data_from_client)
                 else:

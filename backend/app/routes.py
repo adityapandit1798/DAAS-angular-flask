@@ -4,12 +4,7 @@ import os
 import docker
 import requests
 from flask import Blueprint, jsonify, request, Response, session
-import json
-import uuid
-import shutil
-import paramiko
-import select
-from io import StringIO
+import json, uuid, shutil
 
 main = Blueprint('main', __name__)
 
@@ -138,7 +133,6 @@ def get_node_info():
             except Exception:
                 pass
 
-
 @main.route('/api/connect', methods=['POST'])
 def api_connect():
     data = request.get_json()
@@ -237,117 +231,6 @@ def api_disconnect():
                 print(f"Error removing cert directory {session_cert_dir}: {e}")
 
     return jsonify({"success": True, "message": "Disconnected successfully."})
-
-def ssh_socket(ws):
-    """Handles the WebSocket connection for the SSH terminal."""
-    print("[SSH_DEBUG] ssh_socket function entered. Waiting for auth details...")
-    ssh_client = None
-    channel = None
-    try:
-        # print("[SSH_DEBUG] WebSocket connection received.") # Redundant with above log
-        # 1. Receive connection details from the client
-        auth_details = ws.receive(timeout=15)
-        if not auth_details:
-            print("[SSH_DEBUG] Timeout: Did not receive auth details.")
-            ws.close(reason=1008, message='Authentication details not received.')
-            return
-
-        params = json.loads(auth_details)
-        print(f"[SSH_DEBUG] Received auth params: { {k: v for k, v in params.items() if k != 'password' and k != 'sshKey'} }")
-        hostname = params.get('ip')
-        username = params.get('username')
-        password = params.get('password')
-        private_key_str = params.get('sshKey')
-        term_cols = params.get('cols', 80)
-        term_rows = params.get('rows', 24)
-
-        if not hostname or not username:
-            print("[SSH_DEBUG] Missing hostname or username.")
-            ws.send(json.dumps({'error': 'Hostname and username are required.'}))
-            ws.close(reason=1008, message='Hostname and username are required.')
-            return
-
-        # 2. Establish SSH connection with Paramiko
-        ssh_client = paramiko.SSHClient()
-        ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-
-        pkey = None
-        if private_key_str:
-            print("[SSH_DEBUG] Private key provided. Attempting to load.")
-            try:
-                pkey_file = StringIO(private_key_str)
-                # Try loading as different key types
-                for key_class in [paramiko.RSAKey, paramiko.ECDSAKey, paramiko.Ed25519Key, paramiko.DSSKey]:
-                    try:
-                        pkey = key_class.from_private_key(pkey_file)
-                        break
-                    except paramiko.SSHException:
-                        pkey_file.seek(0)
-                if not pkey:
-                    raise paramiko.SSHException("Unsupported or invalid private key format")
-            except paramiko.SSHException as e:
-                print(f"[SSH_DEBUG] Private key error: {e}")
-                ws.send(json.dumps({'error': f'Invalid private key: {e}'}))
-                ws.close(reason=1008, message='Invalid private key.')
-                return
-        else:
-            print("[SSH_DEBUG] No private key provided. Using password auth if available.")
-
-        ws.send(json.dumps({'output': f'Connecting to {hostname}...\r\n'}))
-        print(f"[SSH_DEBUG] Attempting to connect to {username}@{hostname}...")
-        ssh_client.connect(
-            hostname=hostname,
-            username=username,
-            password=password if password else None,
-            pkey=pkey,
-            timeout=10
-        )
-        print("[SSH_DEBUG] SSH connection successful.")
-        ws.send(json.dumps({'output': 'Connection established. Opening shell...\r\n'}))
-
-        # 3. Open an interactive shell
-        print("[SSH_DEBUG] Opening interactive shell.")
-        channel = ssh_client.invoke_shell(term='xterm-color', width=term_cols, height=term_rows)
-        print("[SSH_DEBUG] Shell opened. Entering proxy loop.")
-
-        # 4. Proxy data between WebSocket and SSH channel
-        while ws.connected and channel.active:
-            readable, _, _ = select.select([ws.sock, channel], [], [], 0.1)
-
-            if ws.sock in readable:
-                # print("[SSH_DEBUG] WebSocket is readable.")
-                data = ws.receive(timeout=0)
-                if data:
-                    try:  # Handle resize commands from client
-                        msg = json.loads(data)
-                        if msg.get('type') == 'resize':
-                            channel.resize_pty(width=msg['cols'], height=msg['rows'])
-                    except (json.JSONDecodeError, TypeError):  # Not a JSON command, treat as terminal input
-                        channel.send(data)
-                else:  # Client closed connection
-                    print("[SSH_DEBUG] WebSocket client closed connection.")
-                    break
-
-            if channel in readable:
-                # print("[SSH_DEBUG] SSH channel is readable.")
-                if channel.recv_ready():
-                    output = channel.recv(1024).decode('utf-8', 'ignore')
-                    ws.send(json.dumps({'output': output}))
-                if channel.exit_status_ready():
-                    print("[SSH_DEBUG] SSH channel exit status ready. Closing loop.")
-                    break
-
-    except Exception as e:
-        error_message = f"Error: {str(e)}"
-        print(f"❌ SSH WebSocket Error: {error_message}")
-        try: ws.send(json.dumps({'error': error_message}))
-        except: pass
-    finally:
-        print("[SSH_DEBUG] Cleaning up SSH and WebSocket connections.")
-        if channel: channel.close()
-        if ssh_client: ssh_client.close()
-        if ws.connected: ws.close()
-        print("SSH WebSocket connection closed.")
 
 @main.route('/api/node-info', methods=['GET'])
 def api_node_info():

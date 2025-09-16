@@ -10,10 +10,7 @@ def create_app():
     app.secret_key = os.environ.get('FLASK_SECRET_KEY', os.urandom(24))
     CORS(app)  # Allow frontend to communicate
 
-    from .routes import main, ssh_socket
+    from .routes import main
     app.register_blueprint(main)
-
-    # Register the WebSocket route for SSH
-    sock.route('/api/ssh/ws')(ssh_socket)
 
     return app
