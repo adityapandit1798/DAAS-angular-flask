@@ -378,52 +378,60 @@ def pull_image():
     repository = request.args.get('repository', '').strip()
     tag = request.args.get('tag', 'latest').strip()
 
-    print(f"[pull-image] requested repo={repository} tag={tag}")
+    print(f"[pull-image] [DEBUG] Request received for repo='{repository}', tag='{tag}'")
     if not repository:
         def generate_error():
+            print("[pull-image] [DEBUG] Repository is missing, sending error.")
             yield f"data: {json.dumps({'error': 'Missing repository'})}\n\n"
         return Response(generate_error(), mimetype='text/event-stream', headers={
             'Cache-Control': 'no-cache', 'Connection': 'keep-alive', 'X-Accel-Buffering': 'no'
         })
 
-    def generate():
+    docker_config = session.get('docker_config')
+    if not docker_config:
+        def generate_no_connect_error():
+            print("[pull-image] [DEBUG] Not connected to Docker host, sending error.")
+            yield f"data: {json.dumps({'error': 'Not connected to any Docker host.'})}\n\n"
+        return Response(generate_no_connect_error(), mimetype='text/event-stream', headers={
+            'Cache-Control': 'no-cache', 'Connection': 'keep-alive', 'X-Accel-Buffering': 'no'
+        })
+
+    def generate(config):
         client = None
         try:
-            print("[pull-image] creating docker client")
-            client = get_docker_client()
+            print("[pull-image] [DEBUG] Generator started. Creating Docker client.")
+            client = get_docker_client(config=config)
             client.ping()
-            print("[pull-image] docker ping OK, starting pull stream")
-            for chunk in client.api.pull(repository, tag=tag, stream=True, decode=False):
+            print("[pull-image] [DEBUG] Docker ping OK. Starting pull stream from Docker API.")
+            for i, chunk in enumerate(client.api.pull(repository, tag=tag, stream=True, decode=True)):
                 try:
-                    if isinstance(chunk, bytes):
-                        chunk = chunk.decode('utf-8')
-                    chunk = (chunk or '').strip()
-                    if not chunk:
-                        continue
-                    try:
-                        data = json.loads(chunk)
-                    except json.JSONDecodeError:
-                        data = { 'status': chunk }
                     # Log condensed event
-                    preview = data.get('status') or list(data.keys())[:1]
-                    print(f"[pull-image] event: {preview}")
-                    yield f"data: {json.dumps(data)}\n\n"
+                    status = chunk.get('status', '')
+                    progress = chunk.get('progress', '')
+                    log_msg = f"status='{status}'"
+                    if progress:
+                        log_msg += f", progress='{progress}'"
+                    print(f"[pull-image] [DEBUG] Sending chunk {i+1}: {log_msg}")
+                    yield f"data: {json.dumps(chunk)}\n\n"
                 except Exception as inner_e:
-                    print(f"[pull-image] stream error: {inner_e}")
+                    print(f"[pull-image] [DEBUG] Error processing chunk: {inner_e}")
                     yield f"data: {json.dumps({'error': f'Stream error: {str(inner_e)}'})}\n\n"
-            print("[pull-image] stream completed, sending completion event")
+            print("[pull-image] [DEBUG] Pull stream finished. Sending 'completed' event.")
             yield f"data: {json.dumps({'status': 'completed'})}\n\n"
+            print("[pull-image] [DEBUG] 'completed' event sent.")
         except Exception as e:
-            print(f"[pull-image] failed: {e}")
+            print(f"[pull-image] [DEBUG] An exception occurred during pull: {e}")
             yield f"data: {json.dumps({'error': f'Pull failed: {str(e)}'})}\n\n"
         finally:
             if client:
+                print("[pull-image] [DEBUG] Closing Docker client.")
                 try:
                     client.close()
                 except Exception:
                     pass
+            print("[pull-image] [DEBUG] Generator finished.")
 
-    return Response(generate(), mimetype='text/event-stream', headers={
+    return Response(generate(docker_config), mimetype='text/event-stream', headers={
         'Cache-Control': 'no-cache', 'Connection': 'keep-alive', 'X-Accel-Buffering': 'no', 'Access-Control-Allow-Origin': '*'
     })
 
