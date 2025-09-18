@@ -4,7 +4,7 @@ import os
 import docker
 import requests
 from flask import Blueprint, jsonify, request, Response, session
-import json, uuid, shutil
+import json, uuid, shutil, time
 
 main = Blueprint('main', __name__)
 
@@ -149,7 +149,7 @@ def api_logs():
     # Capture docker_config from session while we are in the request context
     docker_config = session.get('docker_config')
     if not docker_config:
-        return jsonify({"error": "Not connected to any Docker host. Please connect first."}), 401
+        return jsonify({"error": "Not connected to any Docker host. Please connect first."} ), 401
 
     def generate(config):
         client = None
@@ -391,7 +391,7 @@ def pull_image():
     if not docker_config:
         def generate_no_connect_error():
             print("[pull-image] [DEBUG] Not connected to Docker host, sending error.")
-            yield f"data: {json.dumps({'error': 'Not connected to any Docker host.'})}\n\n"
+            yield f"data: {json.dumps({'error': 'Not connected to any Docker host.'})}\\n\n"
         return Response(generate_no_connect_error(), mimetype='text/event-stream', headers={
             'Cache-Control': 'no-cache', 'Connection': 'keep-alive', 'X-Accel-Buffering': 'no'
         })
@@ -412,7 +412,7 @@ def pull_image():
                     if progress:
                         log_msg += f", progress='{progress}'"
                     print(f"[pull-image] [DEBUG] Sending chunk {i+1}: {log_msg}")
-                    yield f"data: {json.dumps(chunk)}\n\n"
+                    yield f"data: {json.dumps(chunk)}\\n\n"
                 except Exception as inner_e:
                     print(f"[pull-image] [DEBUG] Error processing chunk: {inner_e}")
                     yield f"data: {json.dumps({'error': f'Stream error: {str(inner_e)}'})}\n\n"
@@ -495,7 +495,7 @@ def api_networks_create():
     if not name:
         return jsonify({'error': 'Network name is required'}), 400
     if driver not in ['bridge', None, '']:
-        return jsonify({'error': "Only 'bridge' network driver is supported in standalone mode."}), 400
+        return jsonify({'error': "Only 'bridge' network driver is supported in standalone mode."}, 400)
     try:
         client = get_docker_client()
         network = client.networks.create(name=name, driver='bridge', attachable=True)
@@ -787,11 +787,84 @@ def delete_container(container_id):
             client.close()
 
 
+@main.route('/api/containers/<container_id>/stats', methods=['GET'])
+def stream_container_stats(container_id):
+    docker_config = session.get('docker_config')
+    if not docker_config:
+        return jsonify({"error": "Not connected to any Docker host. Please connect first."} ), 401
+
+    def generate(config):
+        client = None
+        try:
+            client = get_docker_client(config=config)
+            container = client.containers.get(container_id)
+            for stat in container.stats(stream=True, decode=True):
+                cpu_stats = stat.get('cpu_stats', {})
+                pre_cpu_stats = stat.get('precpu_stats', {})
+                
+                cpu_usage = cpu_stats.get('cpu_usage', {})
+                pre_cpu_usage = pre_cpu_stats.get('cpu_usage', {})
+
+                cpu_delta = cpu_usage.get('total_usage', 0) - pre_cpu_usage.get('total_usage', 0)
+                system_delta = cpu_stats.get('system_cpu_usage', 0) - pre_cpu_stats.get('system_cpu_usage', 0)
+                
+                cpu_percent = 0.0
+                if system_delta > 0 and cpu_delta > 0:
+                    online_cpus = cpu_stats.get('online_cpus', len(cpu_usage.get('percpu_usage', [])))
+                    if online_cpus > 0:
+                        cpu_percent = (cpu_delta / system_delta) * online_cpus * 100.0
+
+                memory_stats = stat.get('memory_stats', {})
+                mem_usage = memory_stats.get('usage', 0)
+                mem_limit = memory_stats.get('limit', 1)
+                mem_percent = (mem_usage / mem_limit) * 100 if mem_limit > 0 else 0
+
+                networks = {}
+                if 'networks' in stat:
+                    for net_name, net_data in stat['networks'].items():
+                        networks[net_name] = {
+                            'rx': net_data.get('rx_bytes', 0),
+                            'tx': net_data.get('tx_bytes', 0)
+                        }
+
+                output = {
+                    "timestamp": stat.get('read'),
+                    "cpu_percent": round(cpu_percent, 2),
+                    "memory_mb": {
+                        "usage": mem_usage // (1024 * 1024),
+                        "limit": mem_limit // (1024 * 1024),
+                        "percent": round(mem_percent, 2)
+                    },
+                    "network": networks,
+                    "block_io": stat.get('blkio_stats', {}),
+                    "pids": stat.get('pids_stats', {}).get('current', 0)
+                }
+                print(f"[Backend Stats] Raw stat: {stat}")
+                yield f"data: {json.dumps(output)}\\n\n"
+        except docker.errors.NotFound:
+            yield f"data: {json.dumps({'error': 'Container not found'})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': f'Stream failed: {str(e)}'})}\n\n"
+        finally:
+            if client:
+                try:
+                    client.close()
+                except Exception:
+                    pass
+
+    return Response(
+        generate(docker_config),
+        mimetype='text/event-stream',
+        headers={'Cache-Control': 'no-cache', 'Connection': 'keep-alive', 'X-Accel-Buffering': 'no'}
+    )
+
+
 @main.route('/api/delete-image', methods=['POST'])
 def api_delete_image():
     image_id = request.args.get('id', '').strip()
     if not image_id:
         return jsonify({"error": "Image ID is required"}), 400
+
     client = None
     try:
         client = get_docker_client()
