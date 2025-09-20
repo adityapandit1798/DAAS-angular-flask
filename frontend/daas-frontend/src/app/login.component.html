@@ -14,87 +14,51 @@
         <input type="hidden" name="tlsMode" [ngModel]="'https'" />
 
         <div>
-          <label for="ca-cert" class="block text-sm font-medium text-gray-700 mb-1">CA Certificate (ca.pem):</label>
-          <textarea id="ca-cert" name="caCert" rows="4" placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----" 
-          value="-----BEGIN CERTIFICATE-----
-MIIFCTCCAvGgAwIBAgIUe1wuA4YMih3gfvaqk0g0793AfbIwDQYJKoZIhvcNAQEL
-BQAwFDESMBAGA1UEAwwJRG9ja2VyIENBMB4XDTI1MDkwNDEwNDQ0MFoXDTI2MDkw
-NDEwNDQ0MFowFDESMBAGA1UEAwwJRG9ja2VyIENBMIICIjANBgkqhkiG9w0BAQEF
-AAOCAg8AMIICCgKCAgEA3VbGUNHmxQIyEczQ3/aVpIxBt04kLTQl93pMeOpuzen8
-OaVQ3yiLadu7yiPXamWzQH8m++Vsz/UYNuN+WyugU0j0j5ZUyPMPB46/uUNaQ9tL
-Mu5RDLQc6MwrhCJVyt/OQijlgpkLhXfnavUSgQ/0riZdWaAkV2WZ4t/fiqGl9WAC
-vW9urZfX21YuDVE4cgVfdIvPRdNZvXydKGUm+88rJT9os/Zwwm8MnVu63S4xozB4
-mmXCOdlyKwZtwmsfLN7deakotlHQAvP3TybstmTo5M9v05WqFA1mNHiL1oy9fipc
-tv8gHpZr8A4zWMktHTjlByTP/3S7ddKGj4yU5yBzRhKMlpkO2LnJRdkK5ooZcrDz
-YqQP+B0C7vzdtIS//kprSnNxO7vT58cPE4XyssRjzEtoMLfN4er6gvz4vvjeDaho
-7+QbGtrffFdZaP92e0FLt+e+SxOchksOfYpILMWKYq7TJIlcqCbdkwnAeetj5qIS
-Dhr6QZyNAugVBzQjR6CVMAmlSV+PSWvxeunDcUTLDl+xrKtB4tb8EcLs5FE0jrcf
-z/I4ScEVe5Bj30Ri6LWH5r9Z1Ua0RD5QaWIrvBytHfcSG+w5N/lrjhxYbBGb5cM2
-GpvITKBWL5T6ieyL9to9m69kZEArMW7sUGmLEC254vTSksH4zeVfo/21uOinMRUC
-AwEAAaNTMFEwHQYDVR0OBBYEFLve8fgxmu95D48SvU6h1ZPwoeyZMB8GA1UdIwQY
-MBaAFLve8fgxmu95D48SvU6h1ZPwoeyZMA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZI
-hvcNAQELBQADggIBAKafKXb0KGNIIhxOTaZWMtljOO/T9lrSywrA9xRtZwkKcM0m
-HDvLzNZhdOCVzXxc0gQyrWEXP460el6vqge/+z/cxhtEpcjdsFbId2gINly3xXOR
-0z6S+xs+LPDY3LOW3J2T/hcM7YU6fGqSTBkKGcNLaUg9oOV6uGKjp6Cbyq4Tor6s
-gQjkoOnB2Vwzkp8y/b9BrrkvvJwyolxlakew6jeTQeY92eFFnA+49OLm5RU8LF34
-CuSl1OmNLz1o05d1P+KNaxDEYR17RZK2i26qhU1dFC5tXfxaHMHxkk7WejrEkKaA
-k74gSS2nGSdZz3sJA19kyiPA71VuI82C/kL94uUktTzvQEDpLxShIH4HQSD6MYGk
-yyNf7u/uKlD26rnnVu3ppNSBEOpXS1P3C2r1wTxOPHvLRhJBBc6Un3wGxUl8qX3P
-a+rtiTY2mOnbQbF0hR+QlzyjeCbCjhIv7IZaxi9TPbeF8bc0XIs2NGquom/nTazL
-ZHieQAbUpTrNb/iGG+fAnhDKNJ+fanw1nmMHFUEEer4DOPLKF6cJ2GY2xqo2LDcw
-RJVmWUP6UnnRxCEDD6MKapgmg90qqjE4I/hCBAlcRXxD3svK3JoPJtK8ruXiFJgc
-znHrmqZIhYVlxeilv7wJypKm3nCaRqpwH49dhytZQO8GZTY1lhE1Am8fW4IJ
------END CERTIFICATE-----
-"
-          class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all font-mono text-sm" ngModel required></textarea>
+          <label class="block text-sm font-medium text-gray-700 mb-1">CA Certificate (ca.pem)</label>
+          <div class="w-full px-4 py-6 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 text-center cursor-pointer hover:border-blue-400"
+               (dragover)="onDragOver($event)"
+               (drop)="onDrop('caCert', $event)"
+               (click)="caInput.click()">
+            <div>
+              <div class="font-medium">Drag & Drop CA certificate here</div>
+              <div class="text-xs text-gray-500">or click to choose a file</div>
+              <div class="mt-2 text-sm text-gray-700" *ngIf="caCertName">Selected: <span class="font-mono">{{ caCertName }}</span></div>
+            </div>
+          </div>
+          <input #caInput type="file" accept=".pem,.crt,.cer,.txt" class="hidden" (change)="onFileSelected('caCert', $event)" />
         </div>
 
         <div>
-          <label for="client-cert" class="block text-sm font-medium text-gray-700 mb-1">Client Certificate (cert.pem):</label>
-          <textarea id="client-cert" name="clientCert" rows="4" placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----" 
-          value="-----BEGIN CERTIFICATE-----
-MIIFCjCCAvKgAwIBAgIUVAsqB6wIWs3eUw9SXonIrdwzzUUwDQYJKoZIhvcNAQEL
-BQAwFDESMBAGA1UEAwwJRG9ja2VyIENBMB4XDTI1MDkwNDEwNDQ0MloXDTI2MDkw
-NDEwNDQ0MlowETEPMA0GA1UEAwwGY2xpZW50MIICIjANBgkqhkiG9w0BAQEFAAOC
-Ag8AMIICCgKCAgEAx6qTK95PE2x5g0H6lxgYDpKuh27Qjpu7512erPSsLuwEXYTw
-jQc8mgiYhSHIYNjvqZtOk4ueaZ+GrBZxflr21jy34ucTkmrZfOhH+mKtENX05wrh
-1DUVjcTT/zi0neZq3KHqFe5ywAoBEEZvf5KKtF7M5+/r9+R/WbHSEKV/k7i3+L6H
-5/lGnSPXmhF4LCfezJx0WyZAg6JwKuAprusHoWpopBKvQL26u1TSoiO+EILpfQgF
-x1blhgI9Up9fDqNG3nh8+//f0k9sDUKtNGVRqdRVoc+QJ8EA0GWJsLACEwCwYWAM
-bZEEKQVaId+YMebcD6T8I+J/kLkEstPFwmhGjVpnBM7J0kUwePUWY8Ts3O2BaGXI
-wvceWbFRXUm4wadTEz3UNj+CoB8MzSOYXov4uM6FVNrEh7U+mzHozA7Kq+mwRhA3
-73ir7jcah5tlS/daGQMi9CMgmPcNM3Xo1ra5622bviPEFeJ6cvG2S7ivaATMaZ+M
-fzEFBt8hU8Kk1ZuXIwuM6ZfuwX3MnVqSesJFfuEAgB4iNvSgQj0jUitMHIeSUzPB
-4QTuLTWaegV9wDIUeqIZrhQ0lTF5v6FlbGKoHpJ3mgPripYoMRgc58JzocVpcS3X
-sv6WM/nT8H9GIi7c4FRjxFUSxik9bvjO+3o6P9kXJOu53TFIUE7dVyhAUUECAwEA
-AaNXMFUwEwYDVR0lBAwwCgYIKwYBBQUHAwIwHQYDVR0OBBYEFF4yAAycwbQ3e0nP
-A4YRlVoPb/AIMB8GA1UdIwQYMBaAFLve8fgxmu95D48SvU6h1ZPwoeyZMA0GCSqG
-SIb3DQEBCwUAA4ICAQCn0np53xCKBpsknRTwC6CmyakC1DQ7SYGeNLmG1RRs90qS
-2UFAJ6C6MdtVa5baMIISTF958V0RrbUX4b8BalRHYztAg6o95NSd5yfQcdOjNQA9
-Czvo5P0sgbk2a6TnBCmG0OrJH6ph337MXsOKUadUIePuLQ6kppN726ncfrgJsoFI
-3cz4qjspqpjWP3fsOLesseQVqgAz2G9EBCocYtC45hCGJTaUg8tRNbu6ufJG0DYj
-ES9n8Exxs90vAimTVL+HIxzVYUfLFY4/CgPvzNk0J76E12UGYX40lHpuJ5FHEvA/
-pCnvs78k4WTySX+/infWE9mtSJ2rko6Z0yX2G++NfNGKe3WuIvxElpLoyI5/oLg5
-xSpY/wYW2uALeKoU1JdDMZEPdCrFkZabzuQLyseljhvfjK6zivo8yjYDNUPA8cNR
-I5fQd00aNM2I5DhUG4STl1lzsp/npq7t1IvmRRvkbWSBAPkD02uTmWDJHT/DlJf4
-GYpAWn7kGQbEJd30nSJuAwEnqSxUWqnlwHNx0Kq7FfnOBt+Sf2JLrpm+4dUK2Ub/
-t1STdrV+VV7hlBYfhYkWD8xlthUOCUiZmcMKMc7XoXHscbu6aDyTqzNUf8oT0V7U
-Rksg4Qs+/mEdjvKEHafx173iCm9WoTqjYNOFJBgPBDRLWbFLX68k+8tegyc1QQ==
------END CERTIFICATE-----
-"
-          
-          class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all font-mono text-sm" ngModel required></textarea>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Client Certificate (cert.pem)</label>
+          <div class="w-full px-4 py-6 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 text-center cursor-pointer hover:border-blue-400"
+               (dragover)="onDragOver($event)"
+               (drop)="onDrop('clientCert', $event)"
+               (click)="clientCertInput.click()">
+            <div>
+              <div class="font-medium">Drag & Drop Client certificate here</div>
+              <div class="text-xs text-gray-500">or click to choose a file</div>
+              <div class="mt-2 text-sm text-gray-700" *ngIf="clientCertName">Selected: <span class="font-mono">{{ clientCertName }}</span></div>
+            </div>
+          </div>
+          <input #clientCertInput type="file" accept=".pem,.crt,.cer,.txt" class="hidden" (change)="onFileSelected('clientCert', $event)" />
         </div>
 
         <div>
-          <label for="client-key" class="block text-sm font-medium text-gray-700 mb-1">Client Key (key.pem):</label>
-          <textarea id="client-key" name="clientKey" rows="4" placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----" 
-          value=""
-          
-          class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all font-mono text-sm" ngModel required></textarea>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Client Key (key.pem)</label>
+          <div class="w-full px-4 py-6 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 text-center cursor-pointer hover:border-blue-400"
+               (dragover)="onDragOver($event)"
+               (drop)="onDrop('clientKey', $event)"
+               (click)="clientKeyInput.click()">
+            <div>
+              <div class="font-medium">Drag & Drop Client private key here</div>
+              <div class="text-xs text-gray-500">or click to choose a file</div>
+              <div class="mt-2 text-sm text-gray-700" *ngIf="clientKeyName">Selected: <span class="font-mono">{{ clientKeyName }}</span></div>
+            </div>
+          </div>
+          <input #clientKeyInput type="file" accept=".pem,.key,.txt" class="hidden" (change)="onFileSelected('clientKey', $event)" />
         </div>
 
-        <button type="submit" [disabled]="isLoading" class="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium py-2.5 px-4 rounded-lg transition duration-200 shadow-sm flex items-center justify-center">
+        <button type="submit" [disabled]="isLoading || !loginForm.valid || !isFormValid()" class="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium py-2.5 px-4 rounded-lg transition duration-200 shadow-sm flex items-center justify-center">
           <svg *ngIf="isLoading" class="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
