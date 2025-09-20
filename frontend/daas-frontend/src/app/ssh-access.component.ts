@@ -166,7 +166,11 @@ export class SshAccessComponent implements AfterViewInit, OnDestroy, OnInit {
       this.term.writeln('✅ WebSocket connected. Sending container details...');
 
       // Send container details to the test_backend
-      const hostIp = localStorage.getItem('dockerHost') || this.connectionDetails.ip;
+      const lsHost = localStorage.getItem('dockerHost');
+      console.log('[SSH_DEBUG] localStorage.dockerHost =', lsHost);
+      console.log('[SSH_DEBUG] this.connectionDetails.ip =', this.connectionDetails?.ip);
+      const hostIp = lsHost || this.connectionDetails.ip;
+      console.log('[SSH_DEBUG] Using hostIp =', hostIp);
       const payload = {
         containerId: this.containerConsoleDetails.containerId,
         command: this.containerConsoleDetails.command,
@@ -175,7 +179,20 @@ export class SshAccessComponent implements AfterViewInit, OnDestroy, OnInit {
         cols: this.term.cols,
         rows: this.term.rows,
       };
+      console.log('[SSH_DEBUG] Init payload →', payload);
       this.ws?.send(JSON.stringify(payload));
+    };
+
+    this.ws.onerror = (evt) => {
+      console.error('[SSH_DEBUG] WebSocket error:', evt);
+      this.term.writeln('❌ WebSocket error. See console for details.');
+    };
+
+    this.ws.onclose = (evt) => {
+      console.warn('[SSH_DEBUG] WebSocket closed:', evt);
+      this.term.writeln('🔌 WebSocket closed.');
+      this.isConnecting = false;
+      this.isConnected = false;
     };
 
     this.ws.onmessage = (event) => {
