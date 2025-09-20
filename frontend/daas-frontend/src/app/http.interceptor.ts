@@ -2,12 +2,20 @@ import { HttpEvent, HttpInterceptorFn } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { ToastService } from './toast.service';
-import { catchError, throwError } from 'rxjs';
+import { catchError, throwError, tap } from 'rxjs';
 
 export const httpInterceptor: HttpInterceptorFn = (req, next) => {
   const router = inject(Router);
   const toast = inject(ToastService);
+  console.debug('[HTTP] →', req.method, req.urlWithParams, { headers: req.headers, body: req.body });
   return next(req).pipe(
+    tap({
+      next: (event: HttpEvent<any>) => {
+        // Successful events include sent, response, etc.
+        // Avoid noisy logs for very frequent events if desired
+        console.debug('[HTTP] ← OK', req.method, req.urlWithParams);
+      }
+    }),
     catchError((err: any) => {
       console.error('[Interceptor] HTTP Error:', err);
       try {

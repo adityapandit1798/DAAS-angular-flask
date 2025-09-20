@@ -1,12 +1,22 @@
 # backend/app/routes.py
 
 import os
+import logging
 import docker
 import requests
 from flask import Blueprint, jsonify, request, Response, session
 import json, uuid, shutil, time
 
 main = Blueprint('main', __name__)
+
+# Module logger
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
 
 # Directory to store temporary certs
 temp_certs_dir = os.path.join(os.getcwd(), 'temp_certs')
@@ -17,13 +27,16 @@ def get_docker_client(config=None):
     """
     Create a Docker client based on a passed-in config or the current session.
     """
+    logger.debug("get_docker_client() called")
     if config is None:
         if 'docker_config' not in session:
+            logger.error('get_docker_client: docker_config missing from session')
             raise Exception('Not connected to any Docker host. Please connect first.')
         config = session.get('docker_config', {})
 
     base_url = config.get('base_url')
     if not base_url:
+        logger.error('get_docker_client: base_url missing in config')
         raise Exception('Connection details are incomplete in session.')
 
     tls_config = None
@@ -46,6 +59,7 @@ def get_docker_client(config=None):
             verify=True
         )
 
+    logger.info(f"Creating DockerClient base_url={base_url}, tls={'on' if tls_config else 'off'}")
     return docker.DockerClient(
         base_url=base_url,
         tls=tls_config,
@@ -56,6 +70,7 @@ def get_docker_client(config=None):
 def get_node_info():
     client = None
     try:
+        logger.info('Fetching node info via Docker client')
         client = get_docker_client()
         info = client.info()
         version = client.version()
@@ -112,6 +127,7 @@ def get_node_info():
 
     except Exception as e:
         print(f"❌ Error fetching node info: {str(e)}")
+        logger.exception('get_node_info failed')
         return {
             'docker_version': 'N/A',
             'os': 'N/A',
@@ -141,6 +157,7 @@ def get_node_info():
 def api_logs():
     container_id = request.args.get('container')
     print(f"=== API LOGS CALLED === container={container_id}")
+    logger.info(f"/api/logs called for container={container_id}")
 
     if not container_id:
         print("❌ No container ID provided")
@@ -152,6 +169,7 @@ def api_logs():
         return jsonify({"error": "Not connected to any Docker host. Please connect first."} ), 401
 
     def generate(config):
+        logger.debug('api_logs.generate: starting stream')
         client = None
         try:
             # Pass the captured config to get a client without needing the session
@@ -168,9 +186,11 @@ def api_logs():
                     yield f"data: {json.dumps({'line': line})}\n\n"
 
         except docker.errors.NotFound:
+            logger.warning(f"api_logs.generate: container not found: {container_id}")
             yield f"data: {json.dumps({'error': 'Container not found'})}\n\n"
         except Exception as e:
             print(f"❌ Log stream error: {str(e)}")
+            logger.exception('api_logs.generate encountered an error')
             yield f"data: {json.dumps({'error': f'Log stream error: {str(e)}'})}\n\n"
         finally:
             if client:
@@ -188,11 +208,14 @@ def api_logs():
 @main.route('/api/connect', methods=['POST'])
 def api_connect():
     data = request.get_json()
+    logger.info('POST /api/connect received')
+    logger.debug(f"/api/connect payload keys={list((data or {}).keys())}")
 
     host_ip = data.get('hostIp', '').strip()
     mode = 'https'
 
     if not host_ip:
+        logger.error('api_connect: hostIp missing')
         return jsonify({"error": "Host IP is required"}), 400
 
     base_url = f"https://{host_ip}:2376"
@@ -234,6 +257,7 @@ def api_connect():
                 verify=True
             )
         except Exception as e:
+            logger.exception('api_connect: failed to write TLS files')
             return jsonify({"error": f"Failed to configure TLS: {str(e)}"}), 400
 
     session['docker_config'] = {
@@ -252,11 +276,13 @@ def api_connect():
         client.ping()
         client.close()
     except Exception as e:
+        logger.exception('api_connect: ping failed')
         session.pop('docker_config', None)
         if session_id:
             shutil.rmtree(os.path.join(temp_certs_dir, session_id), ignore_errors=True)
         return jsonify({"error": f"Connection failed: {str(e)}"}), 500
 
+    logger.info(f"Connected to Docker host {host_ip} via {mode}")
     return jsonify({
         "success": True,
         "message": "Successfully connected to Docker host",
@@ -834,11 +860,13 @@ def delete_container(container_id):
 
 @main.route('/api/containers/<container_id>/stats', methods=['GET'])
 def stream_container_stats(container_id):
+    logger.info(f"/api/containers/{container_id}/stats requested")
     docker_config = session.get('docker_config')
     if not docker_config:
         return jsonify({"error": "Not connected to any Docker host. Please connect first."} ), 401
 
     def generate(config):
+        logger.debug(f"stats.generate starting for container={container_id}")
         client = None
         try:
             client = get_docker_client(config=config)
@@ -884,11 +912,13 @@ def stream_container_stats(container_id):
                     "block_io": stat.get('blkio_stats', {}),
                     "pids": stat.get('pids_stats', {}).get('current', 0)
                 }
-                #print(f"[Backend Stats] Raw stat: {stat}")
+                # print(f"[Backend Stats] Raw stat: {stat}")
                 yield f"data: {json.dumps(output)}\\n\n"
         except docker.errors.NotFound:
+            logger.warning(f"stats.generate: container not found {container_id}")
             yield f"data: {json.dumps({'error': 'Container not found'})}\n\n"
         except Exception as e:
+            logger.exception('stats.generate error')
             yield f"data: {json.dumps({'error': f'Stream failed: {str(e)}'})}\n\n"
         finally:
             if client:
