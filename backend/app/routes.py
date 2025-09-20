@@ -628,14 +628,19 @@ def api_prune_volumes():
 # ---------- Containers ----------
 @main.route('/api/containers', methods=['GET'])
 def api_containers():
+    print("--- DEBUG: api_containers ---")
     client = None
     try:
+        print("[api_containers] Getting Docker client...")
         client = get_docker_client()
+        print("[api_containers] Docker client obtained. Listing all containers...")
         containers = client.containers.list(all=True)
+        print(f"[api_containers] Found {len(containers)} containers.")
         container_data = []
-        for container in containers:
+        for i, container in enumerate(containers):
             attrs = container.attrs
             state = attrs.get('State', {})
+            print(f"[api_containers] Processing container {i+1}/{len(containers)}: ID={container.short_id}, Name={container.name}")
 
             # Format port mappings
             port_info = []
@@ -648,6 +653,8 @@ def api_containers():
                         port_info.append(f"{host_ip}:{host_port}->{container_port}")
                 else:
                     port_info.append(f"{container_port}(unmapped)")
+            
+            print(f"[api_containers]   - Ports: {', '.join(port_info) if port_info else 'N/A'}")
 
             container_data.append({
                 "id": container.short_id,
@@ -658,24 +665,32 @@ def api_containers():
                 "ports": ", ".join(port_info),
                 "state": state.get('Status', 'unknown').lower()
             })
+        print(f"[api_containers] Finished processing. Returning data for {len(container_data)} containers.")
         return jsonify(container_data)
     except Exception as e:
+        print(f"--- ERROR in api_containers: {str(e)} ---")
         return jsonify({"error": "Failed to fetch containers", "details": str(e)}), 500
     finally:
         if client:
+            print("[api_containers] Closing Docker client.")
             client.close()
+        print("--- END DEBUG: api_containers ---")
 
 
 @main.route('/api/containers/create', methods=['POST'])
 def create_container():
+    print("--- DEBUG: create_container ---")
     client = None
     try:
         data = request.get_json()
+        print(f"[create_container] Received payload: {json.dumps(data, indent=2)}")
         if not data:
+            print("[create_container] ERROR: Invalid JSON payload.")
             return jsonify({"error": "Invalid JSON payload"}), 400
 
         image = data.get('image')
         if not image:
+            print("[create_container] ERROR: Image is a required field.")
             return jsonify({"error": "Image is a required field"}), 400
 
         # --- Prepare arguments for docker-py's create() method ---
@@ -685,15 +700,17 @@ def create_container():
             'command': data.get('command') or None,
             'detach': True,  # Always run in detached mode
         }
+        print(f"[create_container] Basic args: Image='{create_args['image']}', Name='{create_args['name']}'")
 
-        # Environment variables: [{key: 'k', value: 'v'}] -> ['k=v']
+        # Environment variables
         env_vars = data.get('env', [])
         if any(item.get('key') for item in env_vars):
             create_args['environment'] = [
                 f"{item['key']}={item['value']}" for item in env_vars if item.get('key')
             ]
+            print(f"[create_container]   - Env vars: {create_args['environment']}")
 
-        # Port bindings: [{hostPort: '8080', containerPort: '80'}] -> {'80/tcp': 8080}
+        # Port bindings
         ports = data.get('ports', [])
         if any(item.get('containerPort') for item in ports):
             port_bindings = {}
@@ -704,57 +721,76 @@ def create_container():
                         container_port_str += '/tcp'
                     port_bindings[container_port_str] = int(item['hostPort']) if item.get('hostPort') else None
             create_args['ports'] = port_bindings
+            print(f"[create_container]   - Port bindings: {port_bindings}")
 
-        # Volume mounts: [{hostPath: '/h', containerPath: '/c'}] -> {'/h': {'bind': '/c', 'mode': 'rw'}}
+        # Volume mounts
         volumes = data.get('volumes', [])
         if any(item.get('hostPath') for item in volumes):
             create_args['volumes'] = {
                 item['hostPath']: {'bind': item['containerPath'], 'mode': 'rw'}
                 for item in volumes if item.get('hostPath') and item.get('containerPath')
             }
+            print(f"[create_container]   - Volumes: {create_args['volumes']}")
 
-        # Restart policy: 'on-failure' -> {'Name': 'on-failure'}
+        # Restart policy
         restart_policy = data.get('restartPolicy')
         if restart_policy and restart_policy != 'no':
             create_args['restart_policy'] = {'Name': restart_policy}
+            print(f"[create_container]   - Restart policy: {create_args['restart_policy']}")
 
         # Network
         if data.get('network'):
             create_args['network'] = data['network']
+            print(f"[create_container]   - Network: {create_args['network']}")
 
         # --- Create and start the container ---
+        print("[create_container] Getting Docker client...")
         client = get_docker_client()
+        print(f"[create_container] Docker client obtained. Creating container with args: {create_args}")
         container = client.containers.create(**create_args)
+        print(f"[create_container] Container '{container.name}' ({container.id}) created. Starting it...")
         container.start()
+        print(f"[create_container] Container '{container.name}' started successfully.")
 
         return jsonify({"message": f"Container '{container.name}' created successfully.", "id": container.id}), 201
 
     except Exception as e:
         error_message = str(e)
+        print(f"--- ERROR in create_container: {error_message} ---")
         if "Conflict" in error_message and "is already in use by container" in error_message:
             error_message = "A container with this name already exists."
         return jsonify({"error": "Failed to create container", "details": error_message}), 500
     finally:
         if client:
+            print("[create_container] Closing Docker client.")
             try:
                 client.close()
             except Exception:
                 pass
+        print("--- END DEBUG: create_container ---")
 
 
 @main.route('/api/containers/<container_id>/start', methods=['POST'])
 def start_container(container_id):
+    print(f"--- DEBUG: start_container (ID: {container_id}) ---")
     client = None
     try:
+        print(f"[start_container] Getting Docker client...")
         client = get_docker_client()
+        print(f"[start_container] Docker client obtained. Getting container '{container_id}'...")
         container = client.containers.get(container_id)
+        print(f"[start_container] Found container '{container.name}'. Starting it...")
         container.start()
+        print(f"[start_container] Container '{container.name}' started successfully.")
         return jsonify({"message": f"Container '{container.name}' started successfully."})
     except Exception as e:
+        print(f"--- ERROR in start_container: {str(e)} ---")
         return jsonify({"error": str(e)}), 500
     finally:
         if client:
+            print("[start_container] Closing Docker client.")
             client.close()
+        print(f"--- END DEBUG: start_container (ID: {container_id}) ---")
 
 
 @main.route('/api/containers/<container_id>/stop', methods=['POST'])
@@ -774,17 +810,26 @@ def stop_container(container_id):
 
 @main.route('/api/containers/<container_id>', methods=['DELETE'])
 def delete_container(container_id):
+    print(f"--- DEBUG: delete_container (ID: {container_id}) ---")
     client = None
     try:
+        print(f"[delete_container] Getting Docker client...")
         client = get_docker_client()
+        print(f"[delete_container] Docker client obtained. Getting container '{container_id}'...")
         container = client.containers.get(container_id)
+        container_name = container.name
+        print(f"[delete_container] Found container '{container_name}'. Removing it forcefully...")
         container.remove(force=True)
-        return jsonify({"message": f"Container '{container.name}' was removed."})
+        print(f"[delete_container] Container '{container_name}' removed successfully.")
+        return jsonify({"message": f"Container '{container_name}' was removed."})
     except Exception as e:
+        print(f"--- ERROR in delete_container: {str(e)} ---")
         return jsonify({"error": str(e)}), 500
     finally:
         if client:
+            print("[delete_container] Closing Docker client.")
             client.close()
+        print(f"--- END DEBUG: delete_container (ID: {container_id}) ---")
 
 
 @main.route('/api/containers/<container_id>/stats', methods=['GET'])
@@ -839,7 +884,7 @@ def stream_container_stats(container_id):
                     "block_io": stat.get('blkio_stats', {}),
                     "pids": stat.get('pids_stats', {}).get('current', 0)
                 }
-                print(f"[Backend Stats] Raw stat: {stat}")
+                #print(f"[Backend Stats] Raw stat: {stat}")
                 yield f"data: {json.dumps(output)}\\n\n"
         except docker.errors.NotFound:
             yield f"data: {json.dumps({'error': 'Container not found'})}\n\n"

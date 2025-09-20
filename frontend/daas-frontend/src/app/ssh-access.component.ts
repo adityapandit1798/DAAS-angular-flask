@@ -166,9 +166,11 @@ export class SshAccessComponent implements AfterViewInit, OnDestroy, OnInit {
       this.term.writeln('✅ WebSocket connected. Sending container details...');
 
       // Send container details to the test_backend
+      const hostIp = localStorage.getItem('dockerHost') || this.connectionDetails.ip;
       const payload = {
         containerId: this.containerConsoleDetails.containerId,
         command: this.containerConsoleDetails.command,
+        hostIp,
         // Also send terminal dimensions
         cols: this.term.cols,
         rows: this.term.rows,
