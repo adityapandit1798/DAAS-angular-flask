@@ -1,6 +1,7 @@
 import json
 import select
 import logging
+import os
 import time
 import traceback
 from datetime import datetime
@@ -30,13 +31,17 @@ CORS(app, origins="*")
 sock = Sock(app)
 logger.info("✅ Flask app, CORS, and WebSocket initialized successfully")
 
-# --- Hardcoded SSH Credentials ---
-SSH_HOST = '192.168.192.163'
-SSH_USER = 'docker-user'
-SSH_PASS = 'password'
+# --- Default SSH Credentials (can be overridden via environment variables and per-session hostIp) ---
+SSH_HOST = os.getenv('SSH_HOST', '192.168.192.163')
+SSH_USER = os.getenv('SSH_USER', 'docker-user')
+SSH_PASS = os.getenv('SSH_PASS', 'password')
 
-logger.info(f"🔧 SSH Configuration - Host: {SSH_HOST}, User: {SSH_USER}")
-logger.warning("⚠️  Using hardcoded SSH credentials - not recommended for production!")
+logger.info(
+    "🔧 Default SSH configuration loaded (can be overridden per session): "
+    f"Host={SSH_HOST}, User={SSH_USER}"
+)
+if os.getenv('SSH_HOST') is None:
+    logger.warning("⚠️  SSH_HOST not set via environment; using default. You can override by sending hostIp in the WebSocket init payload.")
 
 @sock.route('/ws')
 def ssh_websocket_handler(ws):
