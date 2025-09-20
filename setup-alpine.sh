@@ -32,19 +32,19 @@ TLS_DIR="/etc/docker/tls"
 mkdir -p "$TLS_DIR"
 cd "$TLS_DIR"
 
-# === Detect IP from eth0 using BusyBox-compatible method ===
-echo "🔍 Detecting IP address on eth0 (Alpine/BusyBox compatible)..."
+# === Detect IP from eth1 using BusyBox-compatible method ===
+echo "🔍 Detecting IP address on eth1 (Alpine/BusyBox compatible)..."
 IP=""
-if ip link show eth0 >/dev/null 2>&1; then
-    IP=$(ip addr show eth0 | awk '/inet / {print $2}' | cut -d'/' -f1 | head -n1)
+if ip link show eth1 >/dev/null 2>&1; then
+    IP=$(ip addr show eth1 | awk '/inet / {print $2}' | cut -d'/' -f1 | head -n1)
 fi
 
 # Validate IP
 if [ -z "$IP" ] || ! echo "$IP" | grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}$'; then
-    echo "❌ Could not detect a valid IP address on eth0."
-    echo "💡 Make sure eth0 is up and has an IPv4 address."
-    echo "📄 Here's what 'ip addr show eth0' returns:"
-    ip addr show eth0
+    echo "❌ Could not detect a valid IP address on eth1."
+    echo "💡 Make sure eth1 is up and has an IPv4 address."
+    echo "📄 Here's what 'ip addr show eth1' returns:"
+    ip addr show eth1
     exit 1
 fi
 
