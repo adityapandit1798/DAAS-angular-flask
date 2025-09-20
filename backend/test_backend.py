@@ -100,6 +100,20 @@ def ssh_websocket_handler(ws):
         target_host = host_ip or SSH_HOST
         logger.info(f"🌐 [{session_id}] Target SSH host: {target_host} (provided: {bool(host_ip)})")
 
+        # Proactively inform the client which host will be used
+        try:
+            ws.send(json.dumps({
+                'info': 'session_start',
+                'target_host': target_host,
+                'container_id': container_id,
+                'shell': container_shell,
+                'cols': term_cols,
+                'rows': term_rows
+            }))
+            logger.debug(f"📤 [{session_id}] Sent session_start info to client")
+        except Exception as e:
+            logger.warning(f"⚠️  [{session_id}] Failed to send session_start info: {e}")
+
         if not container_id:
             error_msg = 'Container ID is required but not provided'
             logger.error(f"❌ [{session_id}] {error_msg}")

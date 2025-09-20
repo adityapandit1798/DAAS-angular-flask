@@ -155,9 +155,12 @@ export class SshAccessComponent implements AfterViewInit, OnDestroy, OnInit {
     this.term.writeln('🚀 Initializing console connection...');
     console.log('[SSH_DEBUG] connect() called.');
 
-    // Connect directly to the separate SSH backend on port 5002, bypassing the proxy
-    const wsUrl = `ws://localhost:5002/ws`;
-    console.log(`[SSH_DEBUG] Attempting to connect to WebSocket at: ${wsUrl}`);
+    // Connect to the separate SSH backend. Avoid hardcoded localhost; derive from window or overrides.
+    const wsHost = localStorage.getItem('wsHost') || window.location.hostname;
+    const wsPort = localStorage.getItem('wsPort') || '5002';
+    const wsProto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const wsUrl = `${wsProto}://${wsHost}:${wsPort}/ws`;
+    console.log('[SSH_DEBUG] Computed WebSocket target', { wsHost, wsPort, wsProto, wsUrl });
 
     this.ws = new WebSocket(wsUrl);
 
